@@ -17,8 +17,14 @@ Write-Host "Create a token at: https://github.com/settings/tokens" -ForegroundCo
 Write-Host "Required scope  : repo (full control)" -ForegroundColor Cyan
 Write-Host ""
 
-$tokenSecure = Read-Host "Paste your GitHub token" -AsSecureString
-$tokenPlain  = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($tokenSecure))
+# Read token as plain text so it is not lost in SecureString conversion
+$tokenPlain = Read-Host "Paste your GitHub token"
+$tokenPlain = $tokenPlain.Trim()
+
+if ($tokenPlain -eq "") {
+    Write-Host "Token cannot be empty." -ForegroundColor Red
+    exit 1
+}
 
 $headers = @{ Authorization = "token $tokenPlain"; Accept = "application/vnd.github+json" }
 
@@ -69,7 +75,7 @@ if ($st) {
 
 # Remote
 Write-Host "`n>> Setting remote origin..." -ForegroundColor Cyan
-$remoteUrl = "https://$tokenPlain@github.com/$githubUser/$repoName.git"
+$remoteUrl = "https://$githubUser`:$tokenPlain@github.com/$githubUser/$repoName.git"
 $remotes = git remote
 if ($remotes -contains "origin") {
     git remote set-url origin $remoteUrl
