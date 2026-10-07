@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Command Centre Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats row -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="stat-tile">
+      <div class="stat-val stat-blue">{{ stats.total }}</div>
+      <div class="stat-lbl">Total Messages</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile">
+      <div class="stat-val stat-green">{{ stats.delivered }}</div>
+      <div class="stat-lbl">Delivered</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile">
+      <div class="stat-val stat-yellow">{{ stats.queued }}</div>
+      <div class="stat-lbl">Queued</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile">
+      <div class="stat-val stat-red">{{ stats.rejected }}</div>
+      <div class="stat-lbl">Rejected / Blocked</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Connected Users -->
+  <div class="col-lg-3">
+    <div class="card-dark">
+      <div class="card-header">👥 Connected Users ({{ users | length }})</div>
+      <div class="card-body" style="padding: 0;">
+        {% for u in users %}
+        <div style="padding: 0.6rem 1rem; border-bottom: 1px solid rgba(30,58,95,0.4); display: flex; align-items: center; gap: 0.7rem;">
+          <span class="dot dot-normal"></span>
+          <div>
+            <div style="font-size: 0.85rem; font-weight: 600;">{{ u.name }}</div>
+            <div style="font-size: 0.72rem; color: var(--muted);">{{ u.username }} · {{ u.role | upper }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Message Traffic -->
+  <div class="col-lg-5">
+    <div class="card-dark">
+      <div class="card-header">📡 Message Traffic (Recent 20)</div>
+      <div class="card-body" style="padding: 0; max-height: 400px; overflow-y: auto;">
+        <table class="table-dark-custom">
+          <thead>
+            <tr>
+              <th>ID</th><th>From</th><th>To</th><th>Time</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in recent_messages %}
+            <tr>
+              <td style="font-family: monospace; color: var(--accent); font-size: 0.75rem;">{{ m.message_id[:8] }}…</td>
+              <td>{{ m.sender.name }}</td>
+              <td>{{ m.receiver.name }}</td>
+              <td style="font-size: 0.72rem; color: var(--muted);">{{ m.timestamp.strftime('%H:%M:%S') }}</td>
+              <td><span class="badge-{{ m.status }}">{{ m.status | upper }}</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center; color: var(--muted); padding: 1rem;">No messages yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security Events -->
+  <div class="col-lg-4">
+    <div class="card-dark">
+      <div class="card-header">🔐 Security Events (Recent)</div>
+      <div class="card-body" style="padding: 0; max-height: 400px; overflow-y: auto;">
+        {% for log in recent_logs %}
+        <div style="padding: 0.55rem 1rem; border-bottom: 1px solid rgba(30,58,95,0.4); font-size: 0.78rem;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color:
+              {% if 'FAIL' in log.event_type or 'REPLAY' in log.event_type or 'BLOCKED' in log.event_type %}
+                #f87171
+              {% elif 'SUCCESS' in log.event_type or 'DELIVERED' in log.event_type or 'FLUSHED' in log.event_type %}
+                #4ade80
+              {% elif 'QUEUE' in log.event_type or 'DEGRADED' in log.event_type %}
+                #fbbf24
+              {% else %}
+                var(--accent)
+              {% endif %}
+              ; font-weight: 600;">{{ log.event_type }}</span>
+            <span style="color: var(--muted); font-size: 0.7rem;">{{ log.timestamp.strftime('%H:%M:%S') }}</span>
+          </div>
+          <div style="color: var(--muted); margin-top: 0.1rem;">{{ log.description }}</div>
+        </div>
+        {% else %}
+        <div style="padding: 1.5rem; text-align: center; color: var(--muted); font-size: 0.82rem;">No security events.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Auto-refresh every 8 seconds
+  setTimeout(() => window.location.reload(), 8000);
+</script>
+{% endblock %}

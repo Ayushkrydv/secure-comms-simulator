@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="stat-tile"><div class="stat-val stat-blue">{{ stats.total }}</div><div class="stat-lbl">Total Messages</div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile"><div class="stat-val stat-green">{{ stats.delivered }}</div><div class="stat-lbl">Delivered</div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile"><div class="stat-val stat-yellow">{{ stats.queued }}</div><div class="stat-lbl">Queued</div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile"><div class="stat-val stat-red">{{ stats.rejected }}</div><div class="stat-lbl">Rejected</div></div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Left column: User Management + Create User -->
+  <div class="col-lg-5">
+
+    <!-- Create User -->
+    <div class="card-dark mb-3">
+      <div class="card-header">➕ Create Simulated User</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('admin.create_user') }}">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label">USERNAME</label>
+              <input type="text" name="username" class="form-control" placeholder="e.g. personnel_c" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">DISPLAY NAME</label>
+              <input type="text" name="name" class="form-control" placeholder="e.g. Personnel-Charlie" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">ROLE</label>
+              <select name="role" class="form-select">
+                <option value="field">Field Personnel</option>
+                <option value="command">Command Centre</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">PASSWORD</label>
+              <input type="password" name="password" class="form-control" placeholder="Min 6 chars" required>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary-custom mt-3">CREATE USER</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- User List -->
+    <div class="card-dark">
+      <div class="card-header">👥 Simulated Personnel ({{ users | length }})</div>
+      <div class="card-body" style="padding: 0; max-height: 360px; overflow-y: auto;">
+        <table class="table-dark-custom">
+          <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            {% for u in users %}
+            <tr>
+              <td>{{ u.name }}</td>
+              <td style="font-family: monospace; color: var(--muted);">{{ u.username }}</td>
+              <td><span class="role-pill role-{{ u.role }}">{{ u.role }}</span></td>
+              <td>
+                {% if u.status == 'active' %}
+                  <span class="badge-delivered">ACTIVE</span>
+                {% else %}
+                  <span class="badge-rejected">DISABLED</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if u.id != current_user.id %}
+                <form method="POST" action="{{ url_for('admin.toggle_user', user_id=u.id) }}" style="display:inline;">
+                  <button type="submit" class="btn-outline" style="font-size:0.72rem; padding:0.2rem 0.6rem;">
+                    {% if u.status == 'active' %}Disable{% else %}Enable{% endif %}
+                  </button>
+                </form>
+                {% else %}
+                <span style="color:var(--muted); font-size:0.72rem;">(you)</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column: Network Simulation + Replay Demo + Security Logs -->
+  <div class="col-lg-7">
+
+    <!-- Network Simulation Panel -->
+    <div class="card-dark mb-3">
+      <div class="card-header">📡 Network Simulation Control</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('admin.set_network') }}">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+              <label class="form-label">NETWORK STATE</label>
+              <select name="network_state" class="form-select" id="net-state-select" onchange="updateSliders(this.value)">
+                <option value="NORMAL"   {% if net.network_state == 'NORMAL'   %}selected{% endif %}>● NORMAL</option>
+                <option value="DEGRADED" {% if net.network_state == 'DEGRADED' %}selected{% endif %}>⚡ DEGRADED</option>
+                <option value="OFFLINE"  {% if net.network_state == 'OFFLINE'  %}selected{% endif %}>✕ OFFLINE</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">LATENCY (ms): <span id="latency-val">{{ net.latency }}</span></label>
+              <input type="range" name="latency" min="0" max="2000" value="{{ net.latency }}" class="form-range"
+                     oninput="document.getElementById('latency-val').textContent=this.value" id="latency-range">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">PACKET LOSS (%): <span id="loss-val">{{ net.packet_loss }}</span></label>
+              <input type="range" name="packet_loss" min="0" max="100" value="{{ net.packet_loss }}" class="form-range"
+                     oninput="document.getElementById('loss-val').textContent=this.value" id="loss-range">
+            </div>
+          </div>
+          <button type="submit" class="btn-primary-custom mt-3">▶ APPLY SIMULATION</button>
+          <span style="font-size:0.72rem; color:var(--muted); margin-left:1rem;">
+            Current: <strong style="color:
+              {% if net.network_state == 'NORMAL' %}#4ade80
+              {% elif net.network_state == 'DEGRADED' %}#fbbf24
+              {% else %}#f87171{% endif %}
+            ">{{ net.network_state }}</strong>
+            {% if net.network_state == 'DEGRADED' %}| {{ net.latency }}ms | {{ net.packet_loss }}% loss{% endif %}
+          </span>
+        </form>
+        <!-- Visual guide -->
+        <div style="display:flex; gap:1rem; margin-top:1rem; font-size:0.75rem;">
+          <div style="background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.25); border-radius:6px; padding:0.5rem 0.9rem; flex:1;">
+            <div style="color:#4ade80; font-weight:600; margin-bottom:0.2rem;">NORMAL</div>
+            <div style="color:var(--muted);">95–100% delivery · 5–30ms latency</div>
+          </div>
+          <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:0.5rem 0.9rem; flex:1;">
+            <div style="color:#fbbf24; font-weight:600; margin-bottom:0.2rem;">DEGRADED</div>
+            <div style="color:var(--muted);">High latency · Configurable packet loss</div>
+          </div>
+          <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:6px; padding:0.5rem 0.9rem; flex:1;">
+            <div style="color:#f87171; font-weight:600; margin-bottom:0.2rem;">OFFLINE</div>
+            <div style="color:var(--muted);">All messages queued · Synced on restore</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Replay Attack Demo -->
+    <div class="card-dark mb-3">
+      <div class="card-header">🔁 Replay Attack Demonstration</div>
+      <div class="card-body">
+        <p style="font-size:0.82rem; color:var(--muted); margin-bottom:0.8rem;">
+          Submit an already-processed Message ID to trigger replay detection. The system will reject it and log a security event.
+        </p>
+        <div style="display:flex; gap:0.75rem; align-items:center;">
+          <input type="text" id="replay-id" class="form-control" placeholder="Paste Message ID (UUID)…" style="flex:1;">
+          <button class="btn-danger-custom" onclick="testReplay()">REPLAY TEST</button>
+        </div>
+        <div id="replay-result" style="margin-top:0.75rem; font-size:0.82rem;"></div>
+        <!-- Quick pick from existing messages -->
+        <div style="margin-top:0.75rem; font-size:0.75rem; color:var(--muted);">Quick-pick a delivered message ID:</div>
+        <div id="replay-picks" style="margin-top:0.3rem; display:flex; flex-wrap:wrap; gap:0.4rem;"></div>
+      </div>
+    </div>
+
+    <!-- Security Logs -->
+    <div class="card-dark">
+      <div class="card-header">📋 Security / Audit Log (Recent 30)</div>
+      <div class="card-body" style="padding: 0; max-height: 340px; overflow-y: auto;">
+        <table class="table-dark-custom">
+          <thead><tr><th>Time</th><th>User</th><th>Event</th><th>Description</th></tr></thead>
+          <tbody id="log-body">
+            {% for log in logs %}
+            <tr>
+              <td style="font-size:0.72rem; color:var(--muted); white-space:nowrap;">{{ log.timestamp.strftime('%H:%M:%S') }}</td>
+              <td style="font-family:monospace; font-size:0.78rem;">{{ log.user.username if log.user else 'SYSTEM' }}</td>
+              <td>
+                <span style="font-size:0.72rem; font-weight:600; color:
+                  {% if 'FAIL' in log.event_type or 'REPLAY' in log.event_type or 'BLOCKED' in log.event_type %}#f87171
+                  {% elif 'SUCCESS' in log.event_type or 'DELIVERED' in log.event_type or 'FLUSHED' in log.event_type %}#4ade80
+                  {% elif 'QUEUE' in log.event_type or 'CHANGE' in log.event_type %}#fbbf24
+                  {% else %}var(--accent){% endif %};">
+                  {{ log.event_type }}
+                </span>
+              </td>
+              <td style="font-size:0.78rem; color:var(--muted);">{{ log.description }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center; color:var(--muted); padding:1rem;">No log entries.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function updateSliders(state) {
+    const disabled = (state === 'OFFLINE' || state === 'NORMAL');
+    document.getElementById('latency-range').disabled = disabled;
+    document.getElementById('loss-range').disabled = disabled;
+    if (state === 'NORMAL') {
+      document.getElementById('latency-range').value = 0;
+      document.getElementById('loss-range').value   = 0;
+      document.getElementById('latency-val').textContent = '0';
+      document.getElementById('loss-val').textContent    = '0';
+    }
+    if (state === 'OFFLINE') {
+      document.getElementById('latency-range').value = 0;
+      document.getElementById('loss-range').value   = 100;
+      document.getElementById('latency-val').textContent = '0';
+      document.getElementById('loss-val').textContent    = '100';
+    }
+  }
+
+  function testReplay() {
+    const msgId = document.getElementById('replay-id').value.trim();
+    const out = document.getElementById('replay-result');
+    if (!msgId) { out.innerHTML = '<span style="color:#fbbf24;">Please enter a Message ID.</span>'; return; }
+    out.innerHTML = '<span style="color:var(--muted);">Testing…</span>';
+    fetch('/api/replay/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message_id: msgId })
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.status === 'REJECTED') {
+        out.innerHTML = `<span style="color:#f87171;font-weight:600;">🚫 REJECTED — ${d.reason}</span><br><span style="color:var(--muted);font-size:0.75rem;">Security event logged.</span>`;
+      } else if (d.status === 'ACCEPTED') {
+        out.innerHTML = `<span style="color:#4ade80;font-weight:600;">✅ ACCEPTED — Message processed for first time.</span>`;
+      } else {
+        out.innerHTML = `<span style="color:#fbbf24;">${d.error || JSON.stringify(d)}</span>`;
+      }
+      refreshLogs();
+    })
+    .catch(() => { out.innerHTML = '<span style="color:#f87171;">Request failed.</span>'; });
+  }
+
+  function refreshLogs() {
+    fetch('/api/logs/recent')
+      .then(r => r.json())
+      .then(logs => {
+        const body = document.getElementById('log-body');
+        if (!logs.length) return;
+        body.innerHTML = logs.map(l => {
+          let color = 'var(--accent)';
+          if (/FAIL|REPLAY|BLOCKED/.test(l.event_type)) color = '#f87171';
+          else if (/SUCCESS|DELIVERED|FLUSHED/.test(l.event_type)) color = '#4ade80';
+          else if (/QUEUE|CHANGE/.test(l.event_type)) color = '#fbbf24';
+          return `<tr>
+            <td style="font-size:0.72rem;color:var(--muted);white-space:nowrap;">${l.timestamp.split(' ')[1]}</td>
+            <td style="font-family:monospace;font-size:0.78rem;">${l.user}</td>
+            <td><span style="font-size:0.72rem;font-weight:600;color:${color};">${l.event_type}</span></td>
+            <td style="font-size:0.78rem;color:var(--muted);">${l.description}</td>
+          </tr>`;
+        }).join('');
+      }).catch(() => {});
+  }
+
+  // Populate quick-pick replay buttons from existing delivered messages
+  fetch('/api/messages/mine')
+    .then(r => r.json())
+    .then(msgs => {
+      const picks = document.getElementById('replay-picks');
+      // Show first 5 delivered ones
+      msgs.filter(m => m.status === 'delivered').slice(0, 5).forEach(m => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-outline';
+        btn.style.fontSize = '0.72rem';
+        btn.style.padding = '0.2rem 0.55rem';
+        btn.textContent = m.message_id.substring(0, 12) + '…';
+        btn.title = m.message_id;
+        btn.onclick = () => { document.getElementById('replay-id').value = m.message_id; };
+        picks.appendChild(btn);
+      });
+    }).catch(() => {});
+
+  // Auto-refresh logs every 6 s
+  setInterval(refreshLogs, 6000);
+</script>
+{% endblock %}

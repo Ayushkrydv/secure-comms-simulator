@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Field Dashboard — {{ current_user.name }}{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <!-- Stat tiles -->
+  <div class="col-6 col-md-3">
+    <div class="stat-tile">
+      <div class="stat-val stat-blue" id="stat-total">–</div>
+      <div class="stat-lbl">Total Messages</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile">
+      <div class="stat-val stat-green" id="stat-delivered">–</div>
+      <div class="stat-lbl">Delivered</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile">
+      <div class="stat-val stat-yellow" id="stat-queued">{{ pending }}</div>
+      <div class="stat-lbl">Pending (Queued)</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-tile">
+      <div class="stat-val stat-red" id="stat-rejected">–</div>
+      <div class="stat-lbl">Rejected</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Send Message -->
+  <div class="col-lg-5">
+    <div class="card-dark h-100">
+      <div class="card-header">📤 Compose Secure Message</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('field.send_message') }}">
+          <div class="mb-3">
+            <label class="form-label">RECIPIENT</label>
+            <select name="receiver_id" class="form-select" required>
+              <option value="">— Select Recipient —</option>
+              {% for c in contacts %}
+                <option value="{{ c.id }}">{{ c.name }} ({{ c.role | upper }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">MESSAGE</label>
+            <textarea name="message" class="form-control" rows="5" placeholder="Enter tactical message..." required></textarea>
+          </div>
+          <div class="mb-2" style="font-size:0.75rem; color: var(--muted);">
+            Message will be AES-encrypted + HMAC-integrity-tagged before transmission.
+          </div>
+          <button type="submit" class="btn-primary-custom w-100">🔒 SEND SECURE MESSAGE</button>
+        </form>
+
+        {% if net.network_state == 'OFFLINE' %}
+        <div class="alert alert-danger mt-3">
+          ⚠️ Network is OFFLINE — your message will be securely queued and delivered when connectivity is restored.
+        </div>
+        {% elif net.network_state == 'DEGRADED' %}
+        <div class="alert alert-warning mt-3">
+          ⚡ Network DEGRADED — expect delays or possible packet loss.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Contacts -->
+  <div class="col-lg-3">
+    <div class="card-dark h-100">
+      <div class="card-header">👥 Authorised Contacts</div>
+      <div class="card-body" style="padding: 0;">
+        <ul style="list-style: none; margin: 0; padding: 0;">
+          {% for c in contacts %}
+          <li style="padding: 0.6rem 1rem; border-bottom: 1px solid rgba(30,58,95,0.4); display: flex; align-items: center; gap: 0.6rem;">
+            <span class="dot {% if c.status == 'active' %}dot-normal{% else %}dot-offline{% endif %}"></span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 600;">{{ c.name }}</div>
+              <div style="font-size: 0.72rem; color: var(--muted);">{{ c.role | upper }}</div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Message Log -->
+  <div class="col-lg-4">
+    <div class="card-dark h-100">
+      <div class="card-header">📋 Message Log <span style="float:right; font-size:0.7rem; color:var(--muted); cursor:pointer;" onclick="loadMessages()">↻ Refresh</span></div>
+      <div class="card-body" style="padding: 0; max-height: 380px; overflow-y: auto;" id="msg-log">
+        {% for m in messages %}
+        <div style="padding: 0.6rem 1rem; border-bottom: 1px solid rgba(30,58,95,0.4); font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem;">
+            <span style="color: var(--accent);">{{ m.message_id[:8] }}…</span>
+            <span class="badge-{{ m.status }}">{{ m.status | upper }}</span>
+          </div>
+          <div style="color: var(--muted);">
+            {% if m.sender_id == current_user.id %}
+              ↑ To: {{ m.receiver.name }}
+            {% else %}
+              ↓ From: {{ m.sender.name }}
+            {% endif %}
+          </div>
+          <div style="color: var(--muted); font-size: 0.72rem;">{{ m.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+          {% if m.queued_offline %}<div style="color:#fbbf24; font-size:0.7rem;">⏳ Was queued offline</div>{% endif %}
+        </div>
+        {% else %}
+        <div style="padding: 1.5rem; text-align: center; color: var(--muted); font-size: 0.82rem;">No messages yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Poll network status + stats every 5 s
+  function pollStatus() {
+    fetch('/api/network/status')
+      .then(r => r.json())
+      .then(d => {
+        // Reload page if network state changed (simple approach for prototype)
+        const banner = document.querySelector('.net-banner');
+        const current = banner ? banner.className : '';
+        const incoming = 'net-banner net-' + d.network_state.toLowerCase();
+        if (!current.includes(d.network_state.toLowerCase())) {
+          window.location.reload();
+        }
+      }).catch(() => {});
+
+    fetch('/api/stats')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('stat-total').textContent     = d.total;
+        document.getElementById('stat-delivered').textContent = d.delivered;
+        document.getElementById('stat-queued').textContent    = d.queued;
+        document.getElementById('stat-rejected').textContent  = d.rejected;
+      }).catch(() => {});
+  }
+
+  function loadMessages() {
+    fetch('/api/messages/mine')
+      .then(r => r.json())
+      .then(msgs => {
+        const log = document.getElementById('msg-log');
+        if (!msgs.length) { log.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:0.82rem;">No messages yet.</div>'; return; }
+        log.innerHTML = msgs.map(m => `
+          <div style="padding:0.6rem 1rem;border-bottom:1px solid rgba(30,58,95,0.4);font-size:0.8rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.2rem;">
+              <span style="color:var(--accent);">${m.message_id.substring(0,8)}…</span>
+              <span class="badge-${m.status}">${m.status.toUpperCase()}</span>
+            </div>
+            <div style="color:var(--muted);">${m.sender} → ${m.receiver}</div>
+            <div style="color:var(--muted);font-size:0.72rem;">${m.timestamp}</div>
+            ${m.queued_offline ? '<div style="color:#fbbf24;font-size:0.7rem;">⏳ Was queued offline</div>' : ''}
+          </div>`).join('');
+      }).catch(() => {});
+  }
+
+  setInterval(pollStatus, 5000);
+  pollStatus();
+</script>
+{% endblock %}
